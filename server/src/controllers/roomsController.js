@@ -14,6 +14,74 @@ export default class RoomsController {
     this.#updateGlobalUserData(id)
   }
 
+  disconnect(socket) {
+    console.log("disconnect!!", socket.id)
+    this.#logoutUser(socket)
+  }
+
+  #logoutUser(socket) {
+    const userId = socket.id
+    const user = this.#users.get(userId)
+    const roomId = user.roomId
+    // remover user da lista de users ativos
+    this.#users.delete(userId)
+
+    // caso seja um user sujeira que estava em uma room que não existe mais
+    if (!this.rooms.has(roomId)) {
+      return
+    }
+
+    const room = this.rooms.get(roomId)
+    const toBeRemoved = [...room.users].find(({ id }) => id === userId)
+
+    // removemos o user da sala
+    room.users.delete(toBeRemoved)
+
+    // se não tiver mais nenhum user na room, matamos a room
+    if (!room.users.size) {
+      this.rooms.delete(roomId)
+      return
+    }
+
+    const disconnectedUserWasAnOwner = userId === room.owner.id
+    const onlyOneUserLeft = room.users.size === 1
+
+    // validar se tem somente um user ou se o user é o owner da room
+    if(onlyOneUserLeft || disconnectedUserWasAnOwner) {
+      room.owner =  this.#getNewRoomOwner(room, socket)
+    }
+
+
+    // atualiza a room no final
+    this.rooms.set(roomId, room)
+
+    // notifica a sala que o user se desconectou
+    socket.to(roomId).emit(constants.event.USER_DISCONNECTED, user)
+  }
+
+  #notifyUserPermissionUpgrade(socket, roomId, user) {
+    socket.to(roomId).emit(constants.event.UPGRADE_USER_PERMISSION, user)
+  }
+
+  #getNewRoomOwner(room, socket) {
+    const users = [...room.users.values()]
+    const activeSpeakers = users.find(user => user.isSpeaker)
+    // se quem desconectou era o owner, passa o owner para o próximo
+    // se não houver speakers, pegar o attendee mais antigo (primeira posição)
+    const [newOwner] = activeSpeakers ? [activeSpeakers] :  users
+    newOwner.isSpeaker = true
+
+    const outdatedUser = this.#users.get(newOwner.id)
+    const updatedUser = new Attendee({
+      ...outdatedUser,
+      ...newOwner
+    })
+
+    this.#users.set(newOwner.id, updatedUser)
+    this.#notifyUserPermissionUpgrade(socket, room.id, newOwner)
+    return newOwner
+  }
+
   joinRoom(socket, { user, room }) {
     const userId = (user.id = socket.id)
     const roomId = room.id
