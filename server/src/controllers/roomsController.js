@@ -20,6 +20,35 @@ export default class RoomsController {
     }
   }
 
+  speakAnswer(socket, { answer, attendee }) {
+    const userId = attendee.id
+    const currentUser = this.#users.get(userId)
+    const updatedUser = new Attendee({
+      ...currentUser,
+      isSpeaker: answer,
+    })
+
+    this.#users.set(userId, updatedUser)
+
+    const roomId = attendee.roomId
+    const room = this.rooms.get(roomId)
+    const userOnRoom = [...room.users.values()].find(({ id }) => id === userId)
+    room.users.delete(userOnRoom)
+    room.users.add(updatedUser)
+    this.rooms.set(roomId, room)
+
+    socket.emit(constants.event.UPGRADE_USER_PERMISSION, updatedUser)
+    this.#notifyUserProfileUpgrade(socket, roomId, updatedUser)
+  }
+
+  speakRequest(socket) {
+    const userId = socket.id
+    const user = this.#users.get(userId)
+    const roomId = user.roomId
+    const owner = this.rooms.get(roomId)?.owner
+    socket.to(owner.id).emit(constants.event.SPEAK_REQUEST, user)
+  }
+
   notifyRoomSubscribers(rooms) {
     const event = constants.event.LOBBY_UPDATED
     this.roomsPubSub.emit(event, [...rooms.values()])
@@ -75,7 +104,7 @@ export default class RoomsController {
     socket.to(roomId).emit(constants.event.USER_DISCONNECTED, user)
   }
 
-  #notifyUserPermissionUpgrade(socket, roomId, user) {
+  #notifyUserProfileUpgrade(socket, roomId, user) {
     socket.to(roomId).emit(constants.event.UPGRADE_USER_PERMISSION, user)
   }
 
@@ -94,7 +123,7 @@ export default class RoomsController {
     })
 
     this.#users.set(newOwner.id, updatedUser)
-    this.#notifyUserPermissionUpgrade(socket, room.id, newOwner)
+    this.#notifyUserProfileUpgrade(socket, room.id, newOwner)
     return newOwner
   }
 
