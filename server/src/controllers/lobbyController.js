@@ -9,7 +9,14 @@ export default class LobbyController {
   onNewConnection(socket) {
     const { id } = socket
     this.#updateLobbyRooms(socket, [...this.activeRooms.values()])
+    this.#activateEventProxy(socket)
     console.log("[Lobby] connection stablished with", id)
+  }
+
+  #activateEventProxy(socket) {
+    this.roomsListener.on(constants.event.LOBBY_UPDATED, (rooms) => {
+      this.#updateLobbyRooms(socket, rooms)
+    })
   }
 
   #updateLobbyRooms(socket, activeRooms) {

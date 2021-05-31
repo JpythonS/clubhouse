@@ -1,11 +1,28 @@
 import Attendee from "../entities/attendee.js"
 import Room from "../entities/room.js"
 import { constants } from "../util/constants.js"
+import CustomMap from "../util/customMap.js"
 
 export default class RoomsController {
   #users = new Map()
-  constructor() {
-    this.rooms = new Map()
+
+  constructor({ roomsPubSub }) {
+    this.roomsPubSub = roomsPubSub
+    this.rooms = new CustomMap({
+      observer: this.#roomObserver(),
+      customMapper: this.#mapRoom.bind(this),
+    })
+  }
+
+  #roomObserver() {
+    return {
+      notify: (rooms) => this.notifyRoomSubscribers(rooms),
+    }
+  }
+
+  notifyRoomSubscribers(rooms) {
+    const event = constants.event.LOBBY_UPDATED
+    this.roomsPubSub.emit(event, [...rooms.values()])
   }
 
   onNewConnection(socket) {
@@ -47,10 +64,9 @@ export default class RoomsController {
     const onlyOneUserLeft = room.users.size === 1
 
     // validar se tem somente um user ou se o user é o owner da room
-    if(onlyOneUserLeft || disconnectedUserWasAnOwner) {
-      room.owner =  this.#getNewRoomOwner(room, socket)
+    if (onlyOneUserLeft || disconnectedUserWasAnOwner) {
+      room.owner = this.#getNewRoomOwner(room, socket)
     }
-
 
     // atualiza a room no final
     this.rooms.set(roomId, room)
@@ -65,16 +81,16 @@ export default class RoomsController {
 
   #getNewRoomOwner(room, socket) {
     const users = [...room.users.values()]
-    const activeSpeakers = users.find(user => user.isSpeaker)
+    const activeSpeakers = users.find((user) => user.isSpeaker)
     // se quem desconectou era o owner, passa o owner para o próximo
     // se não houver speakers, pegar o attendee mais antigo (primeira posição)
-    const [newOwner] = activeSpeakers ? [activeSpeakers] :  users
+    const [newOwner] = activeSpeakers ? [activeSpeakers] : users
     newOwner.isSpeaker = true
 
     const outdatedUser = this.#users.get(newOwner.id)
     const updatedUser = new Attendee({
       ...outdatedUser,
-      ...newOwner
+      ...newOwner,
     })
 
     this.#users.set(newOwner.id, updatedUser)

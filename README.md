@@ -28,7 +28,7 @@ Marque esse projeto com uma estrela 🌟
 - Lobby
   - [ ] Se não houver dados do usuario em localStorage deve voltar para login
   - [x] Mostra todas as salas ativas
-  - [ ] Atualiza salas em realtime
+  - [x] Atualiza salas em realtime
   - [x] Pode criar uma sala sem topico
   - [x] Pode criar uma sala com topico
   - [x] Pode acessar salas ativas
